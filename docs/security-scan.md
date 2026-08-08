@@ -14,7 +14,7 @@ Date: 2026-08-08
 | `cargo clippy` (default) | general correctness | 10 warnings, all stylistic |
 | `cargo clippy` (financial lint set) | arithmetic, panics, unwraps, indexing | **7 findings, all fixed** |
 | `cargo clippy` (pedantic) | style and documentation | cosmetic only, see *Not fixed* |
-| `cargo-scout-audit` | Soroban-specific detectors | pending |
+| `cargo-scout-audit` 0.3.16 | Soroban-specific detectors | **could not run — see F-03** |
 
 Financial lint set:
 
@@ -58,6 +58,33 @@ Verification: the full lint set passes with `-D` (deny), and all 12 tests still 
 `clippy::pedantic` reports missing backticks in doc comments, absent `# Errors` sections, and `create_plan` having 10 arguments against a threshold of 7.
 
 Not fixed: the argument count is deliberate — every plan parameter is explicit precisely because the contract is immutable and has no configuration surface. `needless_pass_by_value` on `env: Env` is a false positive; Soroban requires that signature.
+
+### F-03 — Scout cannot analyse a soroban-sdk 27 contract, and reports a false clean result · **unresolved, reported here**
+
+Scout is the tool named by the Audit Bank's pre-audit phase. It **could not analyse this contract**, and — more importantly — **it did not say so**.
+
+**What happens.** Scout 0.3.16 (latest; crates.io 2026-02-13, Docker `coinfabrik/scout:0.3.16`) runs dylint on a pinned `nightly-2025-08-07` toolchain targeting `wasm32-unknown-unknown`. The `soroban-sdk` 27.0.5 build script rejects that target outright:
+
+> Rust compiler 1.82+ with target `wasm32-unknown-unknown` is unsupported by the Soroban Environment, use `wasm32v1-none` available with Rust 1.84+.
+
+The build fails. Scout then prints its summary anyway:
+
+```
+| Crate | Status   | Critical | Medium | Minor | Enhancement |
+| pac   | Analyzed | 0        | 0      | 0     | 0           |
+```
+
+**Status `Analyzed`, zero findings — on a build that never compiled.**
+
+**How this was established, rather than assumed.** A `0/0/0/0` result on first run is indistinguishable from a genuinely clean contract, so it was tested with a canary: a `.unwrap()` was planted in `Pac::leggi`, matching Scout's own documented `unsafe-unwrap` detector. Scout reported `Analyzed` with **0 findings** again. The canary was then removed and the test suite re-verified.
+
+A tool that reports a clean result on code containing a defect it is specifically built to detect is not producing a scan — it is producing a false assurance, which is worse than no scan at all.
+
+**Attempted workarounds**: native `cargo install` fails earlier and for an unrelated reason (`curl-sys` and `libgit2-sys` need a C toolchain not configured on this Windows host). The Docker image gets further but hits the target incompatibility. No newer Scout release exists.
+
+**Consequence for this project**: Soroban-specific detector coverage is currently **missing**, and that gap is stated rather than papered over. Downgrading `soroban-sdk` purely to satisfy the scanner was rejected: it would analyse a different contract from the one that is deployed and would be audited.
+
+**Worth reporting upstream** to CoinFabrik as two separate issues — the SDK 27 incompatibility, and the summary reporting `Analyzed` after a failed build.
 
 ---
 
