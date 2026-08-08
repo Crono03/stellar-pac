@@ -26,9 +26,11 @@ Last reviewed: 2026-08-08. **This document must be updated whenever the contract
 
 ## R — Repudiation
 
-Not materially relevant: everything is on-chain and verifiable, and token transfer events are emitted.
+**Covered as of 2026-08-08.** The contract emits its own events for all five state-changing operations: `created`, `deposited`, `executed`, `withdrawn`, `cancelled`.
 
-**Known gap**: the contract emits no events of its own for `create_plan` / `execute` / `cancel`, so a plan's history must be reconstructed from invocations. Cheap to add; planned before mainnet.
+The **plan id is a topic**, not payload, so a single plan's history can be filtered without scanning everything the contract ever emitted — which was the entire point of the gap this closes. Topic shape `(action, plan_id)`; payload carries the rest. `executed` also carries `next_exec`, so an observer can distinguish a caught-up plan from a late one without a second query.
+
+Verified on-chain, not only in tests: `create_plan` on testnet emitted `[{"symbol":"created"},{"u32":0}] = [owner, 50000000, 2592000]`.
 
 ## I — Information disclosure
 
@@ -69,9 +71,9 @@ Anyone can call `get_plan` and see how much an address accumulates, how often, a
 
 **Accepted and disclosed**: plan visibility, asset choice resting with the owner, absence of keepers at low volume.
 
-**To fix before mainnet** — both observability and UX gaps, not exploitable flaws:
+**To fix before mainnet** — a UX gap, not an exploitable flaw:
 
-1. **Emit contract events** for creation, execution and cancellation.
-2. **Check the destination trustline** at plan creation.
+1. ~~Emit contract events~~ — **done 2026-08-08**, see *Repudiation*.
+2. **Check the destination trustline** at plan creation, instead of surfacing a missing one at first execution.
 
 **No exploitable vulnerability identified by this analysis.** That is a statement about this analysis, not a guarantee: it is exactly what an external audit exists to test.

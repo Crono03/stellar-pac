@@ -37,9 +37,53 @@
 
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    contract, contractclient, contracterror, contractimpl, contracttype, token, vec,
-    Address, Env, IntoVal, Symbol, Vec,
+    contract, contractclient, contracterror, contractimpl, contracttype, symbol_short,
+    token, vec, Address, Env, IntoVal, Symbol, Vec,
 };
+
+/// Events.
+///
+/// The plan id is a **topic**, not payload, so a plan's whole history can be
+/// filtered without scanning every event the contract ever emitted. That was
+/// the point: before these existed, reconstructing what happened to a plan
+/// meant reading raw invocations.
+///
+/// Topic shape is `(action, plan_id)`; the payload carries the rest. Token
+/// transfer events are emitted separately by the SAC and are not duplicated
+/// here — these describe the *plan's* lifecycle, not the movement of funds.
+mod events {
+    use super::{symbol_short, Address, Env};
+
+    pub fn created(env: &Env, id: u32, owner: &Address, amount: i128, interval: u64) {
+        env.events()
+            .publish((symbol_short!("created"), id), (owner.clone(), amount, interval));
+    }
+
+    pub fn deposited(env: &Env, id: u32, from: &Address, amount: i128, budget: i128) {
+        env.events()
+            .publish((symbol_short!("deposited"), id), (from.clone(), amount, budget));
+    }
+
+    /// `next_exec` is included so an observer can tell a caught-up plan from a
+    /// late one without a second query.
+    pub fn executed(env: &Env, id: u32, keeper: &Address, spent: i128,
+                    received: i128, next_exec: u64) {
+        env.events().publish(
+            (symbol_short!("executed"), id),
+            (keeper.clone(), spent, received, next_exec),
+        );
+    }
+
+    pub fn withdrawn(env: &Env, id: u32, amount: i128, budget: i128) {
+        env.events()
+            .publish((symbol_short!("withdrawn"), id), (amount, budget));
+    }
+
+    pub fn cancelled(env: &Env, id: u32, owner: &Address, refunded: i128) {
+        env.events()
+            .publish((symbol_short!("cancelled"), id), (owner.clone(), refunded));
+    }
+}
 
 /// The SoroswapRouter interface — only the part used here.
 ///
@@ -214,6 +258,7 @@ impl Pac {
         env.storage().persistent().set(&DataKey::Plan(id), &plan);
         env.storage().instance().set(&DataKey::NextId, &next);
         Self::renew_ttl(&env, id);
+        events::created(&env, id, &plan.owner, amount, interval);
         Ok(id)
     }
 
@@ -237,6 +282,7 @@ impl Pac {
 
         plan.budget = plan.budget.checked_add(amount).ok_or(Error::Overflow)?;
         Self::write(&env, id, &plan);
+        events::deposited(&env, id, &from, amount, plan.budget);
         Ok(())
     }
 
@@ -293,6 +339,7 @@ impl Pac {
             .checked_add(plan.interval)
             .ok_or(Error::Overflow)?;
         Self::write(&env, id, &plan);
+        events::executed(&env, id, &keeper, plan.amount, received, plan.next_exec);
         Ok(received)
     }
 
@@ -314,6 +361,7 @@ impl Pac {
         );
         plan.budget = plan.budget.checked_sub(amount).ok_or(Error::Overflow)?;
         Self::write(&env, id, &plan);
+        events::withdrawn(&env, id, amount, plan.budget);
         Ok(())
     }
 
@@ -337,6 +385,7 @@ impl Pac {
             );
         }
         env.storage().persistent().remove(&DataKey::Plan(id));
+        events::cancelled(&env, id, &plan.owner, plan.budget);
         Ok(())
     }
 

@@ -64,6 +64,8 @@ What this offers instead: assets a broker will not list, **non-custodial** holdi
 | `cancel(id)` | owner only | stops the plan, returns everything |
 | `get_plan(id)` / `due_plans()` | read-only | state, and which plans are ready |
 
+Every state-changing call emits an event with the plan id as a **topic** — `created`, `deposited`, `executed`, `withdrawn`, `cancelled` — so one plan's history can be filtered without scanning the contract's entire event stream.
+
 Assets, router and pair are **per-plan parameters**, never contract constants — see *Immutability* below.
 
 ---
@@ -136,7 +138,6 @@ This run was repeated after the source was translated to English and `eseguibili
 ## Known gaps
 
 - **No audit.** The Stellar Audit Bank requires SCF funding first.
-- **No events of its own** for create/execute/cancel — a plan's history must be reconstructed from invocations.
 - **Destination trustline is not checked at creation**, so a missing one surfaces at first execution instead.
 - **Plans are public.** Anyone can read amounts, cadence and remaining budget. That is chain transparency, not a contract defect, but a recurring plan is a readable behavioural profile.
 

@@ -10,9 +10,9 @@
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _, Ledger},
+    testutils::{Address as _, Events, Ledger},
     token::{StellarAssetClient, TokenClient},
-    Address, Env,
+    Address, Env, Symbol, TryFromVal, Val,
 };
 
 // ---- mock router ----
@@ -248,6 +248,80 @@ fn interval_too_long_rejected() {
             &b.owner, &b.from, &b.to, &b.router, &b.pair, &100, &quarterly, &0, &5
         )
         .is_ok());
+}
+
+/// Events emitted by this contract so far.
+///
+/// `env.events().all()` returns every event on the ledger, including those the
+/// token contracts emit; `filter_by_contract` narrows it to ours.
+fn our_events(rig: &Rig) -> usize {
+    rig.env
+        .events()
+        .all()
+        .filter_by_contract(&rig.pac.address)
+        .events()
+        .len()
+}
+
+/// The first topic of the n-th of our events, decoded as a Symbol.
+fn topic_action(rig: &Rig, n: usize) -> Symbol {
+    let all = rig.env.events().all();
+    let ours = all.filter_by_contract(&rig.pac.address);
+    let ev = &ours.events()[n];
+    let soroban_sdk::xdr::ContractEventBody::V0(v0) = &ev.body;
+    Symbol::try_from_val(&rig.env, &Val::try_from_val(&rig.env, &v0.topics[0]).unwrap())
+        .unwrap()
+}
+
+/// The second topic of the n-th of our events, decoded as the plan id.
+fn topic_plan_id(rig: &Rig, n: usize) -> u32 {
+    let all = rig.env.events().all();
+    let ours = all.filter_by_contract(&rig.pac.address);
+    let ev = &ours.events()[n];
+    let soroban_sdk::xdr::ContractEventBody::V0(v0) = &ev.body;
+    u32::try_from_val(&rig.env, &Val::try_from_val(&rig.env, &v0.topics[1]).unwrap())
+        .unwrap()
+}
+
+#[test]
+fn lifecycle_is_observable_through_events() {
+    let b = rig();
+
+    // The test environment keeps only the events of the LAST invocation, not a
+    // running log: after each call `our_events` is 1, not a growing total. The
+    // first version of this test asserted cumulative counts and failed on the
+    // second step — the events were firing correctly, the assumption was wrong.
+    let id = create(&b, 100, 3600, 0, 5);
+    assert_eq!(our_events(&b), 1, "create_plan must emit exactly one event");
+    assert_eq!(topic_action(&b, 0), Symbol::new(&b.env, "created"));
+
+    b.pac.deposit(&b.owner, &id, &300);
+    assert_eq!(topic_action(&b, 0), Symbol::new(&b.env, "deposited"));
+
+    b.pac.execute(&b.keeper, &id);
+    assert_eq!(topic_action(&b, 0), Symbol::new(&b.env, "executed"));
+
+    b.pac.withdraw(&id, &50);
+    assert_eq!(topic_action(&b, 0), Symbol::new(&b.env, "withdrawn"));
+
+    b.pac.cancel(&id);
+    assert_eq!(topic_action(&b, 0), Symbol::new(&b.env, "cancelled"));
+}
+
+#[test]
+fn events_carry_the_plan_id_as_a_topic() {
+    let b = rig();
+    // Two plans, only the second executed. The id must be in the topics,
+    // otherwise a plan's history cannot be filtered — which is the entire
+    // reason these events exist.
+    let first = create(&b, 100, 3600, 0, 5);
+    let second = create(&b, 100, 3600, 0, 5);
+    b.pac.deposit(&b.owner, &second, &300);
+    b.pac.execute(&b.keeper, &second);
+
+    assert_eq!(topic_action(&b, 0), Symbol::new(&b.env, "executed"));
+    assert_eq!(topic_plan_id(&b, 0), second, "the id must identify the plan");
+    assert_ne!(topic_plan_id(&b, 0), first);
 }
 
 #[test]
