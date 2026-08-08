@@ -1,0 +1,19 @@
+# Memoria di lavoro dell'agente: note private, non documentazione.
+# Contiene riferimenti a dati finanziari personali — NON pubblicare.
+brain/
+
+# Istruzioni locali per l'agente
+CLAUDE.md
+.mcp.json
+
+# Build
+contracts/target/
+**/test_snapshots/
+**/*.wasm
+
+# Toolchain scaricata, non versionata
+tools/
+
+# Python
+__pycache__/
+*.pyc

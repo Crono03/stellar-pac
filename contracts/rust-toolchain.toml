@@ -1,0 +1,9 @@
+# Il default della macchina e' una nightly di maggio 2025 su cui `zerocopy`
+# (dipendenza transitiva di soroban-sdk 22) non compila: errore E0658.
+# Verificato l'8/8/2026: con stable 1.96.0 compila pulito in 34s.
+# Senza questo file il progetto sembra rotto per un motivo che non c'entra
+# col codice.
+[toolchain]
+channel = "stable"
+# La CLI 27 compila per wasm32v1-none, non piu' per wasm32-unknown-unknown.
+targets = ["wasm32v1-none", "wasm32-unknown-unknown"]

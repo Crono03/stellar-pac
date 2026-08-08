@@ -1,0 +1,15 @@
+[package]
+name = "pac"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = "27"
+
+[dev-dependencies]
+soroban-sdk = { version = "27", features = ["testutils"] }
