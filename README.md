@@ -139,7 +139,7 @@ Contract `CAKU5ERAJTZNZKSJJN6H6XFSNVNXU42BS6HOLOPHBV2DR5YFX5AP6IMI`, executing t
 - **Plans are public.** Anyone can read amounts, cadence and remaining budget. That is chain transparency, not a contract defect, but a recurring plan is a readable behavioural profile.
 - **Source comments are in Italian.** A translation pass is needed before external review.
 
-Threat model: [`docs/threat-model.md`](docs/threat-model.md).
+Threat model: [`docs/threat-model.md`](docs/threat-model.md) · Security scan: [`docs/security-scan.md`](docs/security-scan.md).
 
 ## License
 

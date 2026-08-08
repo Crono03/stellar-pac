@@ -114,6 +114,11 @@ pub enum Error {
     ParametriNonValidi = 5,
     /// Lo swap ha reso meno di `min_out`: il parapetto ha fermato l'esecuzione.
     PrezzoFuoriSoglia = 6,
+    /// Aritmetica fuori intervallo. Con `overflow-checks = true` questi casi
+    /// andrebbero comunque in panic, quindi il fallimento sarebbe gia' sicuro:
+    /// usare `checked_*` serve a restituire un errore TIPIZZATO invece di un
+    /// panic opaco, e a rendere l'intenzione leggibile a chi revisiona.
+    Overflow = 7,
 }
 
 /// Rinnovo della TTL. Valori letti dalla mainnet l'8/8/2026, non stimati.
@@ -210,7 +215,8 @@ impl Pac {
         };
 
         env.storage().persistent().set(&DataKey::Plan(id), &plan);
-        env.storage().instance().set(&DataKey::NextId, &(id + 1));
+        let prossimo = id.checked_add(1).ok_or(Error::Overflow)?;
+        env.storage().instance().set(&DataKey::NextId, &prossimo);
         Self::rinnova_ttl(&env, id);
         Ok(id)
     }
@@ -230,7 +236,7 @@ impl Pac {
             &amount,
         );
 
-        plan.budget += amount;
+        plan.budget = plan.budget.checked_add(amount).ok_or(Error::Overflow)?;
         Self::scrivi(&env, id, &plan);
         Ok(())
     }
@@ -251,7 +257,12 @@ impl Pac {
             return Err(Error::BudgetInsufficiente);
         }
 
-        let da_scambiare = plan.amount - plan.keeper_fee;
+        // `keeper_fee < amount` e' garantito da create_plan, ma non ci si affida
+        // a un invariante lontano: il controllo sta accanto all'operazione.
+        let da_scambiare = plan
+            .amount
+            .checked_sub(plan.keeper_fee)
+            .ok_or(Error::Overflow)?;
 
         // APERTO — vedi brain/concetti/soroban-non-vede-la-sdex.
         // Il path payment classico NON e' invocabile da un contratto Soroban.
@@ -274,10 +285,16 @@ impl Pac {
             );
         }
 
-        plan.budget -= plan.amount;
+        plan.budget = plan
+            .budget
+            .checked_sub(plan.amount)
+            .ok_or(Error::Overflow)?;
         // Somma, non "ora + interval": cosi' un'esecuzione in ritardo non
         // sposta in avanti tutta la cadenza successiva.
-        plan.next_exec = plan.next_exec + plan.interval;
+        plan.next_exec = plan
+            .next_exec
+            .checked_add(plan.interval)
+            .ok_or(Error::Overflow)?;
         Self::scrivi(&env, id, &plan);
         Ok(ricevuto)
     }
@@ -295,7 +312,7 @@ impl Pac {
             &plan.owner,
             &amount,
         );
-        plan.budget -= amount;
+        plan.budget = plan.budget.checked_sub(amount).ok_or(Error::Overflow)?;
         Self::scrivi(&env, id, &plan);
         Ok(())
     }
@@ -416,7 +433,11 @@ impl Pac {
         let path = vec![env, plan.from.clone(), plan.to.clone()];
         // Scadenza generosa: la transazione ha gia' il proprio limite temporale,
         // e una deadline stretta qui aggiungerebbe solo un modo di fallire.
-        let scadenza = env.ledger().timestamp() + 300;
+        let scadenza = env
+            .ledger()
+            .timestamp()
+            .checked_add(300)
+            .ok_or(Error::Overflow)?;
 
         let out = RouterClient::new(env, &plan.router).swap_exact_tokens_for_tokens(
             &amount,
