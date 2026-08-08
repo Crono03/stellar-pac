@@ -62,7 +62,7 @@ What this offers instead: assets a broker will not list, **non-custodial** holdi
 | `execute(keeper, id)` | **anyone** | if due and funded: swaps, pays the keeper, advances the schedule |
 | `withdraw(id, amount)` | owner only | takes back unspent budget |
 | `cancel(id)` | owner only | stops the plan, returns everything |
-| `get_plan(id)` / `eseguibili()` | read-only | state, and which plans are ready |
+| `get_plan(id)` / `due_plans()` | read-only | state, and which plans are ready |
 
 Assets, router and pair are **per-plan parameters**, never contract constants — see *Immutability* below.
 
@@ -119,15 +119,17 @@ All read-only against public endpoints. No account, no cost.
 
 ## Verified on testnet
 
-Contract `CAKU5ERAJTZNZKSJJN6H6XFSNVNXU42BS6HOLOPHBV2DR5YFX5AP6IMI`, executing through the **real Soroswap testnet router**:
+Contract `CBAIBHJIN5TALZM7KAUFETJFMHLVFKEJ6KPHUOSLF6LYOS544JE75FNV`, executing through the **real Soroswap testnet router**:
 
 | | before | after |
 |---|---|---|
-| plan budget | 20 XLM | 15 XLM |
+| plan budget | 15 XLM | 10 XLM |
 | next execution | now | **+30 days exactly** |
-| owner's USDC | 0 | **0.4993884** |
+| owner's USDC | 0.4993884 | **0.9987756** |
 
 5 XLM taken from budget, 0.1 to the keeper, **4.9 swapped**. At the pool's reserve ratio the expected output was 0.5006; 0.4994 arrived. The difference is the pool's own 0.3% fee.
+
+This run was repeated after the source was translated to English and `eseguibili` was renamed to `due_plans`, to verify the rename had not broken the contract/keeper interface. It had not.
 
 ---
 
@@ -137,7 +139,6 @@ Contract `CAKU5ERAJTZNZKSJJN6H6XFSNVNXU42BS6HOLOPHBV2DR5YFX5AP6IMI`, executing t
 - **No events of its own** for create/execute/cancel — a plan's history must be reconstructed from invocations.
 - **Destination trustline is not checked at creation**, so a missing one surfaces at first execution instead.
 - **Plans are public.** Anyone can read amounts, cadence and remaining budget. That is chain transparency, not a contract defect, but a recurring plan is a readable behavioural profile.
-- **Source comments are in Italian.** A translation pass is needed before external review.
 
 Threat model: [`docs/threat-model.md`](docs/threat-model.md) · Security scan: [`docs/security-scan.md`](docs/security-scan.md).
 

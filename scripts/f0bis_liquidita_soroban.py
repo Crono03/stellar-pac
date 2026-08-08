@@ -1,15 +1,15 @@
-"""F0-bis — la liquidita' che il CONTRATTO puo' davvero raggiungere.
+"""Liquidity the CONTRACT can actually reach. Read-only.
 
     python scripts/f0bis_liquidita_soroban.py
 
-PERCHE' ESISTE QUESTO SCRIPT.
-`f0_liquidita.py` misura la SDEX classica e da' numeri ottimi (0,001% a 2 EUR).
-Ma un contratto Soroban **non puo' toccare la SDEX**: quel mercato non e'
-raggiungibile da `execute()`. La misura che conta e' questa, sui protocolli
-Soroban, ed e' l'unica su cui si puo' basare il disegno.
+WHY THIS SCRIPT EXISTS.
+`f0_liquidita.py` measures the classic SDEX and returns excellent numbers
+(0.001% at EUR 2). But a Soroban contract **cannot touch the SDEX**: that
+market is unreachable from `execute()`. This is the measurement that counts,
+taken on Soroban protocols, and the only one the design can rest on.
 
-Metodo: simulazione di una chiamata al SoroswapRouter via Soroban RPC. E'
-gratuita, in sola lettura, non richiede un conto finanziato e non tocca la rete.
+Method: simulating a call to the SoroswapRouter over Soroban RPC. Free,
+read-only, needs no funded account and does not touch the network.
 """
 from __future__ import annotations
 

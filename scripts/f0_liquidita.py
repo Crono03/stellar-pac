@@ -1,23 +1,26 @@
-"""F0 — liquidita' e slippage veri, letti da Horizon MAINNET in sola lettura.
+"""Real liquidity and slippage, read from mainnet Horizon. Read-only.
 
     python scripts/f0_liquidita.py
 
-Nessun account, nessuna chiave, nessuna spesa: Horizon mainnet e' pubblico e
-interrogabile. E' l'unico modo di misurare i prezzi veri, perche' la testnet
-non ha mercato (verificato: 0 rotte).
+No account, no keys, no cost: mainnet Horizon is public and queryable. This is
+the only way to measure real prices, because testnet has no market (verified:
+zero routes).
 
-Fa due cose, e la prima e' di sicurezza:
+It does two things, and the first is a security check:
 
-1. IDENTIFICA L'EMITTENTE VERO. Su Stellar l'asset e' la coppia (codice,
-   emittente): il codice da solo non identifica niente e chiunque puo' emettere
-   "EURC". All'8/8/2026 ne esistono 66. Fra questi, `circle-assets.com` imita
-   `circle.com` con 8 miliardi di supply e 154 conti che ci sono gia' caduti.
-   Il discriminante che funziona non e' il nome ma il NUMERO DI LIQUIDITY POOL:
-   gli asset veri ne hanno (120 Circle, 37 MYKOBO), le imitazioni zero --
-   nessuno mette liquidita' vera su un asset falso.
+1. IDENTIFIES THE REAL ISSUER. On Stellar an asset is the pair (code, issuer):
+   the code alone identifies nothing, and anyone can issue "EURC". As of
+   2026-08-08 there are 66 of them. Among these, `circle-assets.com` imitates
+   `circle.com` with 8 billion supply and 154 accounts already holding it. The
+   signal that works is not the name but the NUMBER OF LIQUIDITY POOLS: the
+   real ones have them (120 for Circle, 37 for MYKOBO), the imitations have
+   none - nobody puts real liquidity behind a fake asset.
 
-2. MISURA LO SLIPPAGE per taglia, cioe' quanto peggiora il prezzo al crescere
-   dell'importo. E' il numero che dice se la soglia minima del PAC regge.
+2. MEASURES SLIPPAGE by size, i.e. how much the price worsens as the amount
+   grows. That is the number that says whether a minimum plan size holds up.
+
+CAVEAT: this measures the classic SDEX, which a Soroban contract CANNOT reach.
+For the venue a contract can actually use, see f0bis_liquidita_soroban.py.
 """
 from __future__ import annotations
 
@@ -28,7 +31,7 @@ import urllib.request
 HORIZON = "https://horizon.stellar.org"
 UA = {"User-Agent": "Mozilla/5.0"}
 CIRCLE_EURC = "GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2"
-TAGLIE = (1, 2, 5, 10, 25, 50, 100, 250, 1000)
+SIZES = (1, 2, 5, 10, 25, 50, 100, 250, 1000)
 
 
 def get(url: str) -> dict:
@@ -36,66 +39,66 @@ def get(url: str) -> dict:
         urllib.request.Request(url, headers=UA), timeout=40))
 
 
-def dominio(r: dict) -> str:
-    h = r.get("_links", {}).get("toml", {}).get("href", "")
-    m = re.search(r"https?://([^/]+)", h)
-    return m.group(1) if m else "(nessun toml)"
+def toml_domain(r: dict) -> str:
+    href = r.get("_links", {}).get("toml", {}).get("href", "")
+    m = re.search(r"https?://([^/]+)", href)
+    return m.group(1) if m else "(no toml)"
 
 
-def emittenti(codice: str) -> None:
-    d = get(f"{HORIZON}/assets?asset_code={codice}&limit=200")["_embedded"]["records"]
+def issuers(code: str) -> None:
+    records = get(f"{HORIZON}/assets?asset_code={code}&limit=200")["_embedded"]["records"]
     print("=" * 76)
-    print(f"1. CHI EMETTE '{codice}' — {len(d)} emittenti distinti")
+    print(f"1. WHO ISSUES '{code}' - {len(records)} distinct issuers")
     print("=" * 76)
-    print("\n  Il codice non identifica l'asset. Ordino per liquidity pool, che e'")
-    print("  il segnale che un'imitazione non puo' falsificare a buon mercato.\n")
-    d.sort(key=lambda r: (-int(r.get("num_liquidity_pools") or 0),
-                          -int(r.get("accounts", {}).get("authorized") or 0)))
-    print(f"  {'dominio toml':<30} {'pool':>5} {'conti':>8} {'supply':>20}")
-    print("  " + "-" * 66)
-    for r in d[:6]:
-        pool = int(r.get("num_liquidity_pools") or 0)
-        acc = int(r.get("accounts", {}).get("authorized") or 0)
-        bal = float(r.get("balances", {}).get("authorized") or 0)
-        flag = "  <- usato" if r["asset_issuer"] == CIRCLE_EURC else (
-            "  <- SUPPLY ASSURDA, POOL ZERO" if pool == 0 and bal > 1e9 else "")
-        print(f"  {dominio(r):<30} {pool:>5} {acc:>8,} {bal:>20,.2f}{flag}")
-    print(f"\n  Emittente pinnato nel codice: {CIRCLE_EURC}")
-    print("  Il contratto deve fissare QUESTO indirizzo, mai risolvere per codice.")
-
-
-def slippage(emittente: str) -> None:
-    print("\n" + "=" * 76)
-    print("2. SLIPPAGE REALE EURC -> XLM, per taglia")
-    print("=" * 76)
-    print(f"\n  {'invii EUR':>10} {'ricevi XLM':>13} {'prezzo':>11} "
-          f"{'salti':>6} {'slippage':>10} {'costo in EUR':>13}")
+    print("\n  The code does not identify the asset. Sorted by liquidity pools,")
+    print("  the signal an impersonator cannot cheaply fake.\n")
+    records.sort(key=lambda r: (-int(r.get("num_liquidity_pools") or 0),
+                                -int(r.get("accounts", {}).get("authorized") or 0)))
+    print(f"  {'toml domain':<30} {'pools':>6} {'holders':>9} {'supply':>20}")
     print("  " + "-" * 68)
-    rif = None
-    for a in TAGLIE:
-        u = (f"{HORIZON}/paths/strict-send?source_asset_type=credit_alphanum4"
-             f"&source_asset_code=EURC&source_asset_issuer={emittente}"
-             f"&source_amount={a}&destination_assets=native")
-        rs = get(u)["_embedded"]["records"]
-        if not rs:
-            print(f"  {a:>10,} nessuna rotta")
-            continue
-        best = max(rs, key=lambda r: float(r["destination_amount"]))
-        dest = float(best["destination_amount"])
-        prezzo = a / dest
-        if rif is None:
-            rif = prezzo
-        s = prezzo / rif - 1
-        print(f"  {a:>10,} {dest:>13,.4f} {prezzo:>11.6f} "
-              f"{len(best['path']):>6} {s:>9.3%} {a * s:>12.4f}e")
+    for r in records[:6]:
+        pools = int(r.get("num_liquidity_pools") or 0)
+        holders = int(r.get("accounts", {}).get("authorized") or 0)
+        supply = float(r.get("balances", {}).get("authorized") or 0)
+        flag = "  <- used" if r["asset_issuer"] == CIRCLE_EURC else (
+            "  <- ABSURD SUPPLY, ZERO POOLS" if pools == 0 and supply > 1e9 else "")
+        print(f"  {toml_domain(r):<30} {pools:>6} {holders:>9,} {supply:>20,.2f}{flag}")
+    print(f"\n  Issuer used in this project: {CIRCLE_EURC}")
+    print("  The owner must pass THIS address when creating a plan, never a code.")
 
-    print("\n  'salti' = asset intermedi attraversati. Zero significa mercato")
-    print("  diretto EURC/XLM, che e' la condizione migliore possibile.")
-    print("\n  Alla taglia che ci interessa (2-50 EUR) lo slippage sta sotto lo")
-    print("  0,06%: e' un ordine di grandezza sotto la fee del keeper (0,5%),")
-    print("  quindi NON e' il vincolo. Il vincolo resta il costo fisso.\n")
+
+def slippage(issuer: str) -> None:
+    print("\n" + "=" * 76)
+    print("2. REAL SLIPPAGE EURC -> XLM, by size")
+    print("=" * 76)
+    print(f"\n  {'send EUR':>10} {'get XLM':>13} {'price':>11} "
+          f"{'hops':>5} {'slippage':>10} {'cost in EUR':>13}")
+    print("  " + "-" * 68)
+    baseline = None
+    for size in SIZES:
+        url = (f"{HORIZON}/paths/strict-send?source_asset_type=credit_alphanum4"
+               f"&source_asset_code=EURC&source_asset_issuer={issuer}"
+               f"&source_amount={size}&destination_assets=native")
+        routes = get(url)["_embedded"]["records"]
+        if not routes:
+            print(f"  {size:>10,} no route")
+            continue
+        best = max(routes, key=lambda r: float(r["destination_amount"]))
+        dest = float(best["destination_amount"])
+        price = size / dest
+        if baseline is None:
+            baseline = price
+        slip = price / baseline - 1
+        print(f"  {size:>10,} {dest:>13,.4f} {price:>11.6f} "
+              f"{len(best['path']):>5} {slip:>9.3%} {size * slip:>12.4f}e")
+
+    print("\n  'hops' = intermediate assets crossed. Zero means a direct")
+    print("  EURC/XLM market, which is the best possible condition.")
+    print("\n  At the sizes that matter here (2-50 EUR) slippage stays under")
+    print("  0.06%: an order of magnitude below the keeper fee. It is NOT the")
+    print("  binding constraint. The fixed cost is.\n")
 
 
 if __name__ == "__main__":
-    emittenti("EURC")
+    issuers("EURC")
     slippage(CIRCLE_EURC)
