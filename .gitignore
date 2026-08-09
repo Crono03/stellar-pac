@@ -2,6 +2,13 @@
 # Contiene riferimenti a dati finanziari personali — NON pubblicare.
 brain/
 
+# Materiale di studio personale, in italiano: il repository pubblico resta
+# in inglese. Il lab e' un buon artefatto e potrebbe essere pubblicato dopo
+# una traduzione, ma oggi ha lo scopo per cui e' nato — imparare il contratto.
+*.pdf
+scripts/lab.py
+scripts/genera_qa_pdf.py
+
 # Istruzioni locali per l'agente
 CLAUDE.md
 .mcp.json
