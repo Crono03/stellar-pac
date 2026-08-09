@@ -140,7 +140,7 @@ This run was repeated after the source was translated to English and `eseguibili
 - **No audit.** The Stellar Audit Bank requires SCF funding first.
 - **Plans are public.** Anyone can read amounts, cadence and remaining budget. That is chain transparency, not a contract defect, but a recurring plan is a readable behavioural profile.
 
-Threat model: [`docs/threat-model.md`](docs/threat-model.md) · Security scan: [`docs/security-scan.md`](docs/security-scan.md).
+Threat model: [`docs/threat-model.md`](docs/threat-model.md) · Security scan: [`docs/security-scan.md`](docs/security-scan.md) · Project brief: [`docs/pitch.md`](docs/pitch.md).
 
 ## License
 
