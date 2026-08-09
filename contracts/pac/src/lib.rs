@@ -209,6 +209,9 @@ impl Pac {
     /// `InvalidParameters` if any value is non-positive, if `interval` is zero
     /// or above `MAX_INTERVAL`, or if `keeper_fee >= amount`.
     /// `Overflow` if the plan counter would wrap.
+    ///
+    /// Also traps, with the token's own error, if `owner` has no trustline for
+    /// `to` — see the comment on the balance probe below.
     pub fn create_plan(
         env: Env,
         owner: Address,
@@ -237,6 +240,26 @@ impl Pac {
         if interval > MAX_INTERVAL {
             return Err(Error::InvalidParameters);
         }
+
+        // Fails now if the owner cannot receive the destination asset, instead
+        // of at the first execution months later.
+        //
+        // Why `balance` and not `authorized`: `authorized` is part of the
+        // Stellar Asset interface, so requiring it would break plans whose
+        // destination is a **native Soroban token**, which has no such
+        // function. `balance` is in the standard token interface, so it exists
+        // everywhere — and on a Stellar Asset Contract it happens to trap when
+        // the trustline is missing, which is exactly the check needed.
+        //
+        // Measured on testnet 2026-08-09: without a trustline both calls fail
+        // with `Error(Contract, #13)` and the diagnostic "trustline entry is
+        // missing for account". They do NOT return zero. On native XLM both
+        // succeed, so no false rejection.
+        //
+        // The token's own error is deliberately left to propagate rather than
+        // being wrapped in a typed error: it names the missing account, which
+        // is more useful than anything this contract could say.
+        token::Client::new(&env, &to).balance(&owner);
 
         let id: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
 

@@ -138,7 +138,6 @@ This run was repeated after the source was translated to English and `eseguibili
 ## Known gaps
 
 - **No audit.** The Stellar Audit Bank requires SCF funding first.
-- **Destination trustline is not checked at creation**, so a missing one surfaces at first execution instead.
 - **Plans are public.** Anyone can read amounts, cadence and remaining budget. That is chain transparency, not a contract defect, but a recurring plan is a readable behavioural profile.
 
 Threat model: [`docs/threat-model.md`](docs/threat-model.md) · Security scan: [`docs/security-scan.md`](docs/security-scan.md).

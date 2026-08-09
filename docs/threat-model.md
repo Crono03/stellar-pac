@@ -48,7 +48,7 @@ Anyone can call `get_plan` and see how much an address accumulates, how often, a
 | A wrong `pair` blocks every execution | **fails safe** | the authorisation does not match the transfer the router attempts, so the transaction reverts and no funds move. The owner can always `cancel` and recover everything |
 | Budget exhausted → entry archived → remainder stuck | **real, partly mitigated** | mitigated by the interval cap (~129 days, under `min_persistent_ttl` of ~134 days) and by TTL renewal on every write. The residual case is a plan neither executed nor cancelled for over 134 days |
 | External router deprecated or drained | **real** | `execute` fails; the owner can `cancel` and recreate the plan on another router. No loss, only interruption |
-| Missing trustline on the destination asset | **real** | the final forward fails and the whole execution reverts. Should be checked at plan creation rather than discovered at first execution |
+| Missing trustline on the destination asset | **covered 2026-08-09** | `create_plan` probes `balance(owner)` on the destination token. Without a trustline the call traps and plan creation fails immediately, instead of the problem surfacing at first execution |
 
 ## E — Elevation of privilege
 
@@ -71,9 +71,17 @@ Anyone can call `get_plan` and see how much an address accumulates, how often, a
 
 **Accepted and disclosed**: plan visibility, asset choice resting with the owner, absence of keepers at low volume.
 
-**To fix before mainnet** — a UX gap, not an exploitable flaw:
+**Fixed since the first revision**:
 
 1. ~~Emit contract events~~ — **done 2026-08-08**, see *Repudiation*.
-2. **Check the destination trustline** at plan creation, instead of surfacing a missing one at first execution.
+2. ~~Check the destination trustline at plan creation~~ — **done 2026-08-09**, see *Denial of service*.
 
-**No exploitable vulnerability identified by this analysis.** That is a statement about this analysis, not a guarantee: it is exactly what an external audit exists to test.
+**No open items remain from this analysis, and no exploitable vulnerability was identified.** That is a statement about this analysis, not a guarantee: it is exactly what an external audit exists to test.
+
+### On the trustline check, because the obvious choice was wrong
+
+The intuitive probe is `authorized(owner)`. It is the wrong one: `authorized` belongs to the **Stellar Asset** interface, so requiring it would break any plan whose destination is a native Soroban token, which has no such function. `balance` is in the **standard token** interface, exists everywhere, and on a Stellar Asset Contract happens to trap precisely when the trustline is missing.
+
+Measured on testnet rather than assumed. Without a trustline, `balance` and `authorized` both fail with `Error(Contract, #13)`, *"trustline entry is missing for account"* — they do **not** return zero, which is what made a balance probe usable as a check at all.
+
+Verified three ways on testnet: destination with a trustline succeeds; destination without one fails immediately at creation; **destination in native XLM still succeeds**, so the check does not reject valid plans.
