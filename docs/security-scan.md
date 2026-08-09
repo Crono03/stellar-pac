@@ -80,11 +80,25 @@ The build fails. Scout then prints its summary anyway:
 
 A tool that reports a clean result on code containing a defect it is specifically built to detect is not producing a scan — it is producing a false assurance, which is worse than no scan at all.
 
-**Attempted workarounds**: native `cargo install` fails earlier and for an unrelated reason (`curl-sys` and `libgit2-sys` need a C toolchain not configured on this Windows host). The Docker image gets further but hits the target incompatibility. No newer Scout release exists.
+**Five workarounds attempted, all documented so nobody repeats them:**
+
+| Attempt | Outcome |
+|---|---|
+| Native `cargo install cargo-scout-audit` | fails earlier and unrelatedly: `curl-sys` and `libgit2-sys` need a C toolchain not configured on this Windows host |
+| Docker image, default invocation | SDK build script rejects the wasm target; Scout reports **`Analyzed / 0`** |
+| `CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu` | too global — breaks Scout's own `detector-helper` build |
+| `-- --target x86_64-unknown-linux-gnu` passthrough to `cargo check` | ignored; Scout pins the wasm target internally |
+| **Vendored SDK with only the build-script target assertion removed** | gets past it, then `soroban-sdk-macros` fails to compile |
+
+The last attempt is the informative one. With the target check bypassed, the build still dies compiling `soroban-sdk-macros` on the nightly Scout pins, **`nightly-2025-08-07`** — roughly a year older than soroban-sdk 27.0.5, released 2026-08-03. That is a toolchain generation gap, not something a flag can bridge.
+
+The vendored patch touched only the build-time target assertion, leaving SDK and contract code byte-identical; it was reverted afterwards, since a `[patch.crates-io]` pointing at a local directory would break the build for anyone else. It is described here rather than shipped.
+
+**Refinement of the false-clean finding.** In the vendored attempt Scout correctly reported `Compilation errors` and `N/A` for every severity. So the false `Analyzed / 0` is **specific to a build-script panic**, not to build failures in general — a more precise bug than first stated, and the more useful form for an upstream report.
 
 **Consequence for this project**: Soroban-specific detector coverage is currently **missing**, and that gap is stated rather than papered over. Downgrading `soroban-sdk` purely to satisfy the scanner was rejected: it would analyse a different contract from the one that is deployed and would be audited.
 
-**Worth reporting upstream** to CoinFabrik as two separate issues — the SDK 27 incompatibility, and the summary reporting `Analyzed` after a failed build.
+**Worth reporting upstream** to CoinFabrik as two issues: (1) the pinned `nightly-2025-08-07` cannot compile soroban-sdk 27; (2) a build-script panic yields `Analyzed / 0` instead of `Compilation errors`, which the tool reports correctly for other failure modes.
 
 ---
 
