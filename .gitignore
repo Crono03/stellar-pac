@@ -6,6 +6,7 @@ brain/
 # in inglese. Il lab e' un buon artefatto e potrebbe essere pubblicato dopo
 # una traduzione, ma oggi ha lo scopo per cui e' nato — imparare il contratto.
 *.pdf
+scf-interest-form.md
 scripts/lab.py
 scripts/genera_qa_pdf.py
 
